@@ -12,6 +12,7 @@ export default function Page() {
   const { data: ot } = useApi<Overtime[]>("/api/overtime");
   const { data: settings } = useApi<Settings>("/api/settings");
   const [edit, setEdit] = useState<Partial<Project> | null>(null);
+  const [q, setQ] = useState("");
   const toast = useToast();
 
   const stats = useMemo(() => {
@@ -22,6 +23,14 @@ export default function Page() {
     });
     return m;
   }, [ot]);
+
+  const sorted = useMemo(() => {
+    const n = (c: string) => Number(c.replace(/[^0-9]/g, "")) || 0;
+    const term = q.trim().toLowerCase();
+    return (projects ?? [])
+      .filter((p) => !term || (p.code + " " + p.name + " " + p.client).toLowerCase().includes(term))
+      .sort((a, b) => n(b.code) - n(a.code) || a.name.localeCompare(b.name));
+  }, [projects, q]);
 
   async function remove(p: Project) {
     if (!confirm(`¿Eliminar el proyecto ${p.name}?`)) return;
@@ -34,6 +43,10 @@ export default function Page() {
       <PageHead title="Proyectos" sub="Define el presupuesto de horas extras y controla cuánto consume cada uno.">
         <button className="btn accent" onClick={() => setEdit({ color: COLORS[0], status: "activo" })}><Icon name="plus" /> Nuevo proyecto</button>
       </PageHead>
+      <div className="filters" style={{ marginBottom: 16 }}>
+        <input className="input" style={{ minWidth: 280 }} placeholder="Buscar por código o nombre…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar proyecto" />
+        <span className="cell-sub" style={{ maxWidth: "none" }}>{sorted.length} de {projects?.length ?? 0} proyectos</span>
+      </div>
       <div className="card table-wrap">
         {!projects ? <div className="skeleton" style={{ height: 240, margin: 16 }} /> : !projects.length ? (
           <Empty title="Aún no hay proyectos" hint="Crea un proyecto para asignarle horas extras." />
@@ -41,15 +54,15 @@ export default function Page() {
           <table>
             <thead><tr><th>Proyecto</th><th>Cliente</th><th>Consumo de presupuesto</th><th className="r">Costo acumulado</th><th>Estado</th><th /></tr></thead>
             <tbody>
-              {projects.map((p) => {
+              {sorted.map((p) => {
                 const s = stats.get(p.id) ?? { h: 0, c: 0 };
                 const pct = p.budgetHours ? s.h / p.budgetHours : 0;
                 const col = pct > 1 ? "var(--bad)" : pct >= 0.8 ? "var(--warn)" : "var(--ok)";
                 return (
                   <tr key={p.id}>
-                    <td><span className="row"><i className="dot" style={{ background: p.color }} /><span><div className="cell-main">{p.name}</div><div className="cell-sub mono">{p.code}</div></span></span></td>
+                    <td className="wrap"><span className="row" style={{ alignItems: "flex-start" }}><i className="dot" style={{ background: p.color, marginTop: 7 }} /><span><div className="cell-main">{p.name}</div><div className="cell-sub mono">{p.code}</div></span></span></td>
                     <td>{p.client || "—"}</td>
-                    <td style={{ minWidth: 220 }}>
+                    <td style={{ minWidth: 170 }}>
                       <div className="row" style={{ justifyContent: "space-between", marginBottom: 5 }}>
                         <span className="num">{Math.round(s.h * 10) / 10} / {p.budgetHours || "∞"} h</span>
                         {p.budgetHours > 0 && <b className="num" style={{ color: col }}>{Math.round(pct * 100)}%</b>}
