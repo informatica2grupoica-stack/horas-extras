@@ -7,6 +7,7 @@ import { OT_TYPES, type Settings } from "@/lib/types";
 
 export default function Page() {
   const { data, reload } = useApi<Settings>("/api/settings");
+  const { data: health } = useApi<{ mode: string }>("/api/health");
   const [s, setS] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
   const [calcSalary, setCalcSalary] = useState("800000");
@@ -28,11 +29,12 @@ export default function Page() {
     reload();
   }
   async function wipe() {
-    if (!confirm("Se borrarán TODOS los trabajadores, proyectos y registros. Esta acción no se puede deshacer. ¿Continuar?")) return;
+    const t = prompt("Se borrarán TODOS los trabajadores, proyectos y registros. No se puede deshacer. Escribe BORRAR TODO para confirmar:");
+    if (t !== "BORRAR TODO") return;
     setBusy(true);
-    await api("DELETE", "/api/seed");
+    try { await api("DELETE", "/api/seed", { confirm: t }); toast.show("Todos los datos fueron eliminados"); }
+    catch (e) { toast.show((e as Error).message); }
     setBusy(false);
-    toast.show("Todos los datos fueron eliminados");
     reload();
   }
 
@@ -144,8 +146,8 @@ export default function Page() {
           </div>
 
           <div className="card card-pad" style={{ display: "grid", gap: 14 }}>
-            <div><h2>Datos</h2><div className="sub">Útil para probar el sistema o empezar de cero.</div></div>
-            <div className="row"><button className="btn" onClick={seed} disabled={busy}>Cargar datos de ejemplo</button><button className="btn danger" onClick={wipe} disabled={busy}>Borrar todos los datos</button></div>
+            <div><h2>Datos</h2><div className="sub">Zona de riesgo: borrar elimina todo y pide confirmación.</div></div>
+            <div className="row">{health?.mode === "file" && <button className="btn" onClick={seed} disabled={busy}>Cargar datos de ejemplo</button>}<button className="btn danger" onClick={wipe} disabled={busy}>Borrar todos los datos</button></div>
           </div>
         </div>
       </div>
