@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { get, getSettings, list, put, del } from "./db";
 import { hoursBetween } from "./calc";
+import { effectiveRate, overtimeCost } from "./payroll";
 import type { Overtime, OtType, Project, Worker } from "./types";
 
 export const RESOURCES = ["workers", "projects", "overtime"] as const;
@@ -27,10 +28,17 @@ async function buildOvertime(input: any, prev?: Overtime): Promise<Overtime> {
   const hours = hoursBetween(b.start, b.end);
   need(hours <= 16, "Una jornada de horas extras no puede superar 16 h");
   const multiplier = settings.multipliers[type];
+  if (settings.enforceDaily && settings.maxDailyHours > 0) {
+    const sameDay = (await list<Overtime>("overtime")).filter(
+      (o) => o.workerId === worker!.id && o.date === b.date && o.status !== "rechazada" && o.id !== prev?.id,
+    );
+    const total = sameDay.reduce((a, o) => a + o.hours, 0) + hours;
+    need(total <= settings.maxDailyHours, `Supera el máximo legal de ${settings.maxDailyHours} h extras por día (ese día llevaría ${total} h)`);
+  }
   return {
     id: prev?.id ?? randomUUID(),
     workerId: worker!.id, projectId: project!.id, date: b.date, start: b.start, end: b.end,
-    hours, type, multiplier, cost: Math.round(hours * worker!.hourlyRate * multiplier),
+    hours, type, multiplier, cost: overtimeCost(hours, effectiveRate(worker!, settings), multiplier),
     description: str(b.description, 500),
     status: ["pendiente", "aprobada", "rechazada"].includes(b.status) ? b.status : "pendiente",
     createdAt: prev?.createdAt ?? new Date().toISOString(),
@@ -44,7 +52,7 @@ export async function build(resource: Resource, input: any, prev?: any) {
   if (resource === "workers") {
     const w: Worker = {
       id: prev?.id ?? randomUUID(), name: str(b.name), document: str(b.document, 40), role: str(b.role),
-      hourlyRate: num(b.hourlyRate), active: b.active !== false, createdAt: prev?.createdAt ?? new Date().toISOString(),
+      baseSalary: num(b.baseSalary), hourlyRate: num(b.hourlyRate), active: b.active !== false, createdAt: prev?.createdAt ?? new Date().toISOString(),
     };
     return w;
   }

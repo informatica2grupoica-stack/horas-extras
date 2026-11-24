@@ -7,6 +7,7 @@ import { Icon } from "./ui";
 const NAV = [
   { href: "/", label: "Panel", icon: "chart" },
   { href: "/registros", label: "Registros", icon: "clock" },
+  { href: "/liquidacion", label: "Liquidación", icon: "receipt" },
   { href: "/proyectos", label: "Proyectos", icon: "folder" },
   { href: "/trabajadores", label: "Trabajadores", icon: "users" },
   { href: "/configuracion", label: "Configuración", icon: "cog" },

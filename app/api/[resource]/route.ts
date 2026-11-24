@@ -3,6 +3,7 @@ import { getSettings, put as putDb } from "@/lib/db";
 import { build, isResource, list, put, ValidationError } from "@/lib/resources";
 
 export const dynamic = "force-dynamic";
+const clamp = (v: unknown, min: number, max: number, fb: number) => { const n = Number(v); return Number.isFinite(n) && n >= min && n <= max ? n : fb; };
 type Ctx = { params: Promise<{ resource: string }> };
 
 export async function GET(_: Request, { params }: Ctx) {
@@ -39,6 +40,13 @@ export async function PUT(req: Request, { params }: Ctx) {
     multipliers: mult,
     monthlyLimitPerWorker: Math.max(0, Number(b.monthlyLimitPerWorker) || 0),
     currency: String(b.currency || cur.currency).slice(0, 5).toUpperCase(),
+    weeklyHours: clamp(b.weeklyHours, 1, 60, cur.weeklyHours),
+    monthDivisor: clamp(b.monthDivisor, 28, 31, cur.monthDivisor),
+    maxDailyHours: clamp(b.maxDailyHours, 0, 12, cur.maxDailyHours),
+    enforceDaily: Boolean(b.enforceDaily),
+    afpRate: clamp(b.afpRate, 0, 30, cur.afpRate),
+    healthRate: clamp(b.healthRate, 0, 30, cur.healthRate),
+    unemploymentRate: clamp(b.unemploymentRate, 0, 5, cur.unemploymentRate),
   };
   await putDb("settings", "main", next);
   return NextResponse.json(next);

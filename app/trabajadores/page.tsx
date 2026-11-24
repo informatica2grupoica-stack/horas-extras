@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Empty, Field, Icon, Modal, PageHead, Toast, api, useApi, useToast } from "@/components/ui";
 import { fmtMoney } from "@/lib/format";
+import { effectiveRate, overtimeUnit } from "@/lib/payroll";
 import type { Overtime, Settings, Worker } from "@/lib/types";
 
 export default function Page() {
@@ -39,7 +40,7 @@ export default function Page() {
           <Empty title="Aún no hay trabajadores" hint="Crea a las personas del equipo para poder asignarles horas extras." />
         ) : (
           <table>
-            <thead><tr><th>Nombre</th><th>RUT</th><th className="r">Valor hora</th><th className="r">Horas este mes</th><th className="r">Horas totales</th><th>Estado</th><th /></tr></thead>
+            <thead><tr><th>Nombre</th><th>RUT</th><th className="r">Sueldo base</th><th className="r">Valor hora</th><th className="r">Hora extra</th><th className="r">Horas este mes</th><th className="r">Horas totales</th><th>Estado</th><th /></tr></thead>
             <tbody>
               {workers.map((w) => {
                 const s = stats.get(w.id) ?? { month: 0, total: 0 };
@@ -49,7 +50,9 @@ export default function Page() {
                   <tr key={w.id}>
                     <td><div className="cell-main">{w.name}</div><div className="cell-sub">{w.role || "—"}</div></td>
                     <td className="num">{w.document || "—"}</td>
-                    <td className="r num">{fmtMoney(w.hourlyRate, settings?.currency)}</td>
+                    <td className="r num">{w.baseSalary ? fmtMoney(w.baseSalary, settings?.currency) : "—"}</td>
+                    <td className="r num">{settings ? fmtMoney(Math.round(effectiveRate(w, settings)), settings.currency) : ""}</td>
+                    <td className="r num"><b>{settings ? fmtMoney(overtimeUnit(effectiveRate(w, settings), settings.multipliers.diurna), settings.currency) : ""}</b></td>
                     <td className="r num"><b style={{ color: over ? "var(--bad)" : undefined }}>{Math.round(s.month * 10) / 10}</b>{limit ? <span className="cell-sub"> / {limit}</span> : null}</td>
                     <td className="r num">{Math.round(s.total * 10) / 10}</td>
                     <td><Badge kind={w.active ? "ok" : undefined}>{w.active ? "Activo" : "Inactivo"}</Badge></td>
@@ -64,18 +67,18 @@ export default function Page() {
           </table>
         )}
       </div>
-      {edit && <WorkerForm initial={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); toast.show("Trabajador guardado"); reload(); }} />}
+      {edit && <WorkerForm settings={settings} initial={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); toast.show("Trabajador guardado"); reload(); }} />}
       <Toast msg={toast.msg} />
     </>
   );
 }
 
-function WorkerForm({ initial, onClose, onSaved }: { initial: Partial<Worker>; onClose: () => void; onSaved: () => void }) {
-  const [v, setV] = useState({ name: initial.name ?? "", document: initial.document ?? "", role: initial.role ?? "", hourlyRate: String(initial.hourlyRate ?? ""), active: initial.active ?? true });
+function WorkerForm({ initial, settings, onClose, onSaved }: { initial: Partial<Worker>; settings: Settings | null; onClose: () => void; onSaved: () => void }) {
+  const [v, setV] = useState({ name: initial.name ?? "", document: initial.document ?? "", role: initial.role ?? "", baseSalary: String(initial.baseSalary ?? ""), hourlyRate: String(initial.hourlyRate ?? ""), active: initial.active ?? true });
   const [err, setErr] = useState("");
   async function save() {
     try {
-      const body = { ...v, hourlyRate: Number(v.hourlyRate) || 0 };
+      const body = { ...v, baseSalary: Number(v.baseSalary) || 0, hourlyRate: Number(v.hourlyRate) || 0 };
       if (initial.id) await api("PATCH", `/api/workers/${initial.id}`, body); else await api("POST", "/api/workers", body);
       onSaved();
     } catch (e) { setErr((e as Error).message); }
@@ -87,7 +90,17 @@ function WorkerForm({ initial, onClose, onSaved }: { initial: Partial<Worker>; o
         <Field label="Nombre completo" full><input className="input" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} autoFocus /></Field>
         <Field label="RUT"><input className="input" value={v.document} onChange={(e) => setV({ ...v, document: e.target.value })} /></Field>
         <Field label="Cargo"><input className="input" value={v.role} onChange={(e) => setV({ ...v, role: e.target.value })} /></Field>
-        <Field label="Valor hora ordinaria"><input className="input" type="number" min="0" value={v.hourlyRate} onChange={(e) => setV({ ...v, hourlyRate: e.target.value })} /></Field>
+        <Field label="Sueldo base mensual"><input className="input" type="number" min="0" value={v.baseSalary} onChange={(e) => setV({ ...v, baseSalary: e.target.value })} placeholder="Ej: 800000" /></Field>
+        <Field label="Valor hora manual (si no hay sueldo base)"><input className="input" type="number" min="0" value={v.hourlyRate} disabled={Number(v.baseSalary) > 0} onChange={(e) => setV({ ...v, hourlyRate: e.target.value })} /></Field>
+        {settings && (() => {
+          const rate = effectiveRate({ baseSalary: Number(v.baseSalary) || 0, hourlyRate: Number(v.hourlyRate) || 0 }, settings);
+          return (
+            <div className="preview full">
+              <div><div className="cell-sub">Valor hora ordinaria</div><b className="num">{fmtMoney(Math.round(rate), settings.currency)}</b></div>
+              <div style={{ textAlign: "right" }}><div className="cell-sub">Hora extra (× {settings.multipliers.diurna})</div><b className="num">{fmtMoney(overtimeUnit(rate, settings.multipliers.diurna), settings.currency)}</b></div>
+            </div>
+          );
+        })()}
         <Field label="Estado">
           <select className="input" value={String(v.active)} onChange={(e) => setV({ ...v, active: e.target.value === "true" })}><option value="true">Activo</option><option value="false">Inactivo</option></select>
         </Field>

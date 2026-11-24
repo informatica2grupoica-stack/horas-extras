@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { put, wipe } from "./db";
 import { hoursBetween } from "./calc";
+import { effectiveRate, overtimeCost } from "./payroll";
 import { DEFAULT_SETTINGS, type OtType, type Overtime, type Project, type Worker } from "./types";
 
 export async function seed() {
@@ -8,13 +9,13 @@ export async function seed() {
   await put("settings", "main", DEFAULT_SETTINGS);
   const now = new Date().toISOString();
   const wdata: [string, string, number][] = [
-    ["Carlos Ramírez", "Maestro de obra", 7500], ["Lucía Fernández", "Ingeniera residente", 14000],
-    ["Andrés Mejía", "Electricista", 6500], ["Paula Ortiz", "Diseñadora", 10000],
-    ["Jorge Salazar", "Soldador", 7000], ["Marta Gil", "Coordinadora SST", 9500],
-    ["Sebastián Cruz", "Operador", 6000], ["Valentina Ríos", "Arquitecta", 13000],
+    ["Carlos Ramírez", "Maestro de obra", 1100000], ["Lucía Fernández", "Ingeniera residente", 2200000],
+    ["Andrés Mejía", "Electricista", 950000], ["Paula Ortiz", "Diseñadora", 1500000],
+    ["Jorge Salazar", "Soldador", 1050000], ["Marta Gil", "Coordinadora SST", 1400000],
+    ["Sebastián Cruz", "Operador", 800000], ["Valentina Ríos", "Arquitecta", 2000000],
   ];
-  const workers: Worker[] = wdata.map(([name, role, hourlyRate], i) => ({
-    id: randomUUID(), name, role, hourlyRate, document: `${12000000 + i * 1370003}-${i}`, active: true, createdAt: now,
+  const workers: Worker[] = wdata.map(([name, role, baseSalary], i) => ({
+    id: randomUUID(), name, role, baseSalary, hourlyRate: 0, document: `${12000000 + i * 1370003}-${i}`, active: true, createdAt: now,
   }));
   const pdata: [string, string, string, number, string][] = [
     ["OB-101", "Torre Aurora", "Constructora Delta", 420, "#e8590c"],
@@ -58,7 +59,7 @@ export async function seed() {
         const old = end.getTime() - d.getTime() > 20 * 86400000;
         const o: Overtime = {
           id: randomUUID(), workerId: w.id, projectId: projects[pi].id, date: d.toISOString().slice(0, 10),
-          start, end: endT, hours, type, multiplier: mult, cost: Math.round(hours * w.hourlyRate * mult),
+          start, end: endT, hours, type, multiplier: mult, cost: overtimeCost(hours, effectiveRate(w, DEFAULT_SETTINGS), mult),
           description: descs[Math.floor(rnd() * 4)],
           status: old ? (rnd() < 0.92 ? "aprobada" : "rechazada") : rnd() < 0.5 ? "pendiente" : "aprobada",
           createdAt: now,

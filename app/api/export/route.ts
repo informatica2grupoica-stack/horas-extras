@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { getSettings, list } from "@/lib/db";
+import { buildPayroll } from "@/lib/payrollReport";
 import { OT_TYPES, type Overtime, type Project, type Worker } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -165,6 +166,36 @@ export async function GET(req: Request) {
       ref: `B2:${lastCol}${sx.rowCount}`,
       rules: [{ type: "colorScale", priority: 1, cfvo: [{ type: "min" }, { type: "max" }], color: [{ argb: "FFFDEEE6" }, { argb: "FFD9480F" }] }],
     });
+  }
+
+  // 7. Liquidación (solo si se pide un mes puntual): horas extras APROBADAS listas para la liquidación de sueldo
+  if (/^d{4}-d{2}$/.test(month)) {
+    const pr = await buildPayroll(month);
+    const sl = wb.addWorksheet("Liquidación " + month);
+    sl.columns = [{ header: "Trabajador" }, { header: "RUT" }, { header: "Cargo" }, { header: "Sueldo base" }, { header: "Valor hora ordinaria" },
+      { header: "Horas extras (aprobadas)" }, { header: "Haber: horas extras (imponible y tributable)" }, { header: "AFP (est.)" }, { header: "Salud (est.)" },
+      { header: "Seg. cesantía (est.)" }, { header: "Líquido aprox. horas extras" }, { header: "Horas pendientes (no incluidas)" }];
+    for (const r of pr.rows) {
+      const row = sl.addRow([r.name, r.document, r.role, r.baseSalary || "", Math.round(r.rate), r.hours, r.amount, r.afp, r.health, r.unemployment, r.net, r.pendingHours || ""]);
+      [4, 5, 7, 8, 9, 10, 11].forEach((c) => (row.getCell(c).numFmt = MONEY));
+    }
+    const k = pr.rows.length + 1;
+    const tr = sl.addRow(["TOTAL", "", "", "", "", pr.totals.hours, pr.totals.amount, pr.totals.afp, pr.totals.health, pr.totals.unemployment, pr.totals.net, pr.totals.pendingHours || ""]);
+    tr.font = { bold: true };
+    [7, 8, 9, 10, 11].forEach((c) => (tr.getCell(c).numFmt = MONEY));
+    tr.eachCell((c) => (c.border = { top: { style: "thin" } }));
+    void k;
+    style(sl, [26, 14, 22, 14, 18, 16, 26, 13, 13, 16, 20, 18]);
+    sl.getRow(1).height = 40;
+    sl.getRow(1).alignment = { wrapText: true, vertical: "middle" };
+    sl.addRow([]);
+    [
+      "Notas:",
+      "• Solo se incluyen horas extras APROBADAS. Las pendientes se informan aparte y no suman.",
+      "• Las horas extras son remuneración imponible y tributable: afectas a AFP, salud, seguro de cesantía e impuesto único. No forman parte de la base de la gratificación legal.",
+      `• Valor hora = (sueldo base ÷ ${pr.settings.monthDivisor}) × 7 ÷ ${pr.settings.weeklyHours} h de jornada semanal. Hora extra = valor hora × recargo (mínimo 1,5).`,
+      `• Descuentos estimados con AFP ${pr.settings.afpRate}%, salud ${pr.settings.healthRate}% y cesantía ${pr.settings.unemploymentRate}%. No incluyen impuesto único ni topes imponibles: es una referencia, no la liquidación oficial.`,
+    ].forEach((t, i) => { const r = sl.addRow([t]); if (i === 0) r.font = { bold: true }; });
   }
 
   const buf = await wb.xlsx.writeBuffer();

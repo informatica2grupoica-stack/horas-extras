@@ -3,6 +3,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Badge, Empty, Field, Icon, Modal, PageHead, Toast, api, downloadCsv, useApi, useToast } from "@/components/ui";
 import { hoursBetween } from "@/lib/calc";
+import { effectiveRate, overtimeCost } from "@/lib/payroll";
 import { fmtDate, fmtMoney, today } from "@/lib/format";
 import { OT_TYPES, type Overtime, type Project, type Settings, type Worker } from "@/lib/types";
 
@@ -125,7 +126,7 @@ function Registros() {
 
       {edit && workers && projects && settings && (
         <OvertimeForm initial={edit} workers={workers.filter((w) => w.active || w.id === edit.workerId)} projects={projects.filter((p) => p.status !== "cerrado" || p.id === edit.projectId)}
-          settings={settings} onClose={() => setEdit(null)}
+          settings={settings} rows={rows ?? []} onClose={() => setEdit(null)}
           onSaved={() => { setEdit(null); toast.show("Registro guardado"); reload(); }} />
       )}
       <Toast msg={toast.msg} />
@@ -133,8 +134,8 @@ function Registros() {
   );
 }
 
-function OvertimeForm({ initial, workers, projects, settings, onClose, onSaved }: {
-  initial: Partial<Overtime>; workers: Worker[]; projects: Project[]; settings: Settings; onClose: () => void; onSaved: () => void;
+function OvertimeForm({ initial, workers, projects, settings, rows, onClose, onSaved }: {
+  initial: Partial<Overtime>; workers: Worker[]; projects: Project[]; settings: Settings; rows: Overtime[]; onClose: () => void; onSaved: () => void;
 }) {
   const [v, setV] = useState({
     workerId: initial.workerId ?? "", projectId: initial.projectId ?? "", date: initial.date ?? today(),
@@ -145,7 +146,10 @@ function OvertimeForm({ initial, workers, projects, settings, onClose, onSaved }
   const [busy, setBusy] = useState(false);
   const hours = hoursBetween(v.start, v.end);
   const mult = settings.multipliers[v.type];
-  const rate = workers.find((w) => w.id === v.workerId)?.hourlyRate ?? 0;
+  const worker = workers.find((w) => w.id === v.workerId);
+  const rate = worker ? effectiveRate(worker, settings) : 0;
+  const dayTotal = rows.filter((o) => o.workerId === v.workerId && o.date === v.date && o.status !== "rechazada" && o.id !== initial.id).reduce((a, o) => a + o.hours, 0) + hours;
+  const overDaily = settings.maxDailyHours > 0 && v.workerId && dayTotal > settings.maxDailyHours;
   const set = (k: string, val: string) => setV((x) => ({ ...x, [k]: val }));
 
   async function save() {
@@ -183,9 +187,10 @@ function OvertimeForm({ initial, workers, projects, settings, onClose, onSaved }
       </div>
       <div className="preview">
         <div><div className="cell-sub">Duración</div><b className="num">{hours} h</b></div>
-        <div><div className="cell-sub">Valor hora × recargo</div><b className="num">{fmtMoney(rate, settings.currency)} × {mult}</b></div>
-        <div style={{ textAlign: "right" }}><div className="cell-sub">Costo estimado</div><b className="num">{fmtMoney(Math.round(hours * rate * mult), settings.currency)}</b></div>
+        <div><div className="cell-sub">Valor hora × recargo</div><b className="num">{fmtMoney(Math.round(rate), settings.currency)} × {mult}</b></div>
+        <div style={{ textAlign: "right" }}><div className="cell-sub">Costo estimado</div><b className="num">{fmtMoney(overtimeCost(hours, rate, mult), settings.currency)}</b></div>
       </div>
+      {overDaily ? <div className="error" style={{ background: "var(--warn-soft)", color: "var(--warn)" }}>Ese día el trabajador llevaría {Math.round(dayTotal * 100) / 100} h extras. El máximo legal es {settings.maxDailyHours} h por día.{settings.enforceDaily ? " No se podrá guardar." : ""}</div> : null}
       {err && <div className="error">{err}</div>}
     </Modal>
   );
