@@ -60,7 +60,10 @@ function Registros() {
   return (
     <>
       <PageHead title="Registros" sub="Cada hora extra queda ligada a un trabajador y a un proyecto.">
-        <button className="btn" onClick={exportCsv} disabled={!filtered.length}><Icon name="download" /> Exportar CSV</button>
+        <a className="btn" href={`/api/export?${new URLSearchParams(Object.entries({ projectId: f.projectId, workerId: f.workerId, status: f.status, month: f.month }).filter(([, v]) => v))}`}>
+          <Icon name="download" /> Exportar Excel
+        </a>
+        <button className="btn" onClick={exportCsv} disabled={!filtered.length}>CSV</button>
         <button className="btn accent" onClick={() => setEdit({})}><Icon name="plus" /> Registrar horas</button>
       </PageHead>
 

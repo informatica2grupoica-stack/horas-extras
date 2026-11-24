@@ -42,6 +42,9 @@ export default function Dashboard() {
   return (
     <>
       <PageHead title="Panel de horas extras" sub="Qué mes y qué proyecto consumen más horas del equipo.">
+        <a className="btn" href={`/api/export?${new URLSearchParams(Object.entries({ from: fromFor(period), projectId }).filter(([, v]) => v))}`}>
+          <Icon name="download" /> Exportar Excel
+        </a>
         <Link href="/registros?nuevo=1" className="btn accent"><Icon name="plus" /> Registrar horas</Link>
       </PageHead>
 

@@ -3,7 +3,7 @@
 Sistema interno para registrar y analizar horas extras por trabajador y proyecto. Sin inicio de sesión.
 
 - **Panel**: KPIs, mes y proyecto que más consumen, mapa de calor proyecto×mes, ranking, presupuesto de horas, alertas.
-- **Registros**: alta/edición, aprobación, filtros y exportación CSV. El costo se calcula con valor hora × recargo.
+- **Registros**: alta/edición, aprobación, filtros, exportación a Excel (.xlsx con 6 hojas) y CSV. El costo se calcula con valor hora × recargo.
 - **Proyectos / Trabajadores**: CRUD con presupuesto de horas, límite mensual por persona.
 - **Configuración**: recargos (diurna, nocturna, festiva), moneda, datos de ejemplo.
 
